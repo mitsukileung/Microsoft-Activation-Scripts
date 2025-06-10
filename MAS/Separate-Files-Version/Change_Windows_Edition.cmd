@@ -1,4 +1,4 @@
-@set masver=2.7
+@set masver=3.4
 @echo off
 
 
@@ -36,26 +36,28 @@ set "Path=%SystemRoot%\Sysnative;%SystemRoot%;%SystemRoot%\Sysnative\Wbem;%Syste
 set "ComSpec=%SysPath%\cmd.exe"
 set "PSModulePath=%ProgramFiles%\WindowsPowerShell\Modules;%SysPath%\WindowsPowerShell\v1.0\Modules"
 
+set re1=
+set re2=
 set "_cmdf=%~f0"
 for %%# in (%*) do (
-if /i "%%#"=="r1" set r1=1
-if /i "%%#"=="r2" set r2=1
+if /i "%%#"=="re1" set re1=1
+if /i "%%#"=="re2" set re2=1
 )
 
 :: Re-launch the script with x64 process if it was initiated by x86 process on x64 bit Windows
 :: or with ARM64 process if it was initiated by x86/ARM32 process on ARM64 Windows
 
-if exist %SystemRoot%\Sysnative\cmd.exe if not defined r1 (
+if exist %SystemRoot%\Sysnative\cmd.exe if not defined re1 (
 setlocal EnableDelayedExpansion
-start %SystemRoot%\Sysnative\cmd.exe /c ""!_cmdf!" %* r1"
+start %SystemRoot%\Sysnative\cmd.exe /c ""!_cmdf!" %* re1"
 exit /b
 )
 
 :: Re-launch the script with ARM32 process if it was initiated by x64 process on ARM64 Windows
 
-if exist %SystemRoot%\SysArm32\cmd.exe if %PROCESSOR_ARCHITECTURE%==AMD64 if not defined r2 (
+if exist %SystemRoot%\SysArm32\cmd.exe if %PROCESSOR_ARCHITECTURE%==AMD64 if not defined re2 (
 setlocal EnableDelayedExpansion
-start %SystemRoot%\SysArm32\cmd.exe /c ""!_cmdf!" %* r2"
+start %SystemRoot%\SysArm32\cmd.exe /c ""!_cmdf!" %* re2"
 exit /b
 )
 
@@ -63,6 +65,8 @@ exit /b
 
 set "blank="
 set "mas=ht%blank%tps%blank%://mass%blank%grave.dev/"
+set "github=ht%blank%tps%blank%://github.com/massgra%blank%vel/Micro%blank%soft-Acti%blank%vation-Scripts"
+set "selfgit=ht%blank%tps%blank%://git.acti%blank%vated.win/massg%blank%rave/Micr%blank%osoft-Act%blank%ivation-Scripts"
 
 ::  Check if Null service is working, it's important for the batch script
 
@@ -72,7 +76,7 @@ echo:
 echo Null service is not running, script may crash...
 echo:
 echo:
-echo Help - %mas%troubleshoot
+echo Check this webpage for help - %mas%fix_service
 echo:
 echo:
 ping 127.0.0.1 -n 20
@@ -87,7 +91,7 @@ echo:
 echo Error - Script either has LF line ending issue or an empty line at the end of the script is missing.
 echo:
 echo:
-echo Help - %mas%troubleshoot
+echo Check this webpage for help - %mas%troubleshoot
 echo:
 echo:
 ping 127.0.0.1 -n 20 >nul
@@ -108,6 +112,8 @@ set _unattended=0
 
 set _args=%*
 if defined _args set _args=%_args:"=%
+if defined _args set _args=%_args:re1=%
+if defined _args set _args=%_args:re2=%
 if defined _args (
 for %%A in (%_args%) do (
 if /i "%%A"=="-el"                    set _elev=1
@@ -124,10 +130,20 @@ set "line=echo _________________________________________________________________
 
 ::========================================================================================================================================
 
+if %winbuild% EQU 1 (
+%eline%
+echo Failed to detect Windows build number.
+echo:
+setlocal EnableDelayedExpansion
+set fixes=%fixes% %mas%troubleshoot
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
+goto dk_done
+)
+
 if %winbuild% LSS 7600 (
-%nceline%
+%eline%
 echo Unsupported OS version detected [%winbuild%].
-echo Project is supported only for Windows 7/8/8.1/10/11 and their Server equivalents.
+echo This option is supported only for Windows 7/8/8.1/10/11 and their Server equivalents.
 goto dk_done
 )
 
@@ -163,32 +179,6 @@ goto dk_done
 
 ::========================================================================================================================================
 
-::  Check PowerShell
-
-REM :PowerShellTest: $ExecutionContext.SessionState.LanguageMode :PowerShellTest:
-
-cmd /c "%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':PowerShellTest:\s*';iex ($f[1])"" | find /i "FullLanguage" %nul1% || (
-%eline%
-cmd /c "%psc% "$ExecutionContext.SessionState.LanguageMode""
-echo:
-cmd /c "%psc% "$ExecutionContext.SessionState.LanguageMode"" | find /i "FullLanguage" %nul1% && (
-echo Failed to run Powershell command but Powershell is working.
-call :dk_color %Blue% "Check if your antivirus is blocking the script."
-echo:
-set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
-) || (
-echo PowerShell is not working. Aborting...
-echo If you have applied restrictions on Powershell then undo those changes.
-echo:
-set fixes=%fixes% %mas%fix_powershell
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%fix_powershell"
-)
-goto dk_done
-)
-
-::========================================================================================================================================
-
 ::  Elevate script as admin and pass arguments and preventing loop
 
 %nul1% fltmc || (
@@ -196,6 +186,66 @@ if not defined _elev %psc% "start cmd.exe -arg '/c \"!_PSarg!\"' -verb runas" &&
 %eline%
 echo This script needs admin rights.
 echo Right click on this script and select 'Run as administrator'.
+goto dk_done
+)
+
+::========================================================================================================================================
+
+::  Check PowerShell
+
+::pstst $ExecutionContext.SessionState.LanguageMode :pstst
+
+for /f "delims=" %%a in ('%psc% "if ($PSVersionTable.PSEdition -ne 'Core') {$f=[io.file]::ReadAllText('!_batp!') -split ':pstst';iex ($f[1])}" %nul6%') do (set tstresult=%%a)
+
+if /i not "%tstresult%"=="FullLanguage" (
+%eline%
+for /f "delims=" %%a in ('%psc% "$ExecutionContext.SessionState.LanguageMode" %nul6%') do (set tstresult2=%%a)
+echo Test 1 - %tstresult%
+echo Test 2 - !tstresult2!
+echo:
+
+REM check LanguageMode
+
+echo: !tstresult2! | findstr /i "ConstrainedLanguage RestrictedLanguage NoLanguage" %nul1% && (
+echo FullLanguage mode not found in PowerShell. Aborting...
+echo If you have applied restrictions on Powershell then undo those changes.
+echo:
+set fixes=%fixes% %mas%fix_powershell
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%fix_powershell"
+goto dk_done
+)
+
+REM check Powershell core version
+
+cmd /c "%psc% "$PSVersionTable.PSEdition"" | find /i "Core" %nul1% && (
+echo Windows Powershell is needed for MAS but it seems to be replaced with Powershell core. Aborting...
+goto dk_done
+)
+
+REM check for Mal-ware that may cause issues with Powershell
+
+for /r "%ProgramFiles%\" %%f in (secureboot.exe) do if exist "%%f" (
+echo "%%f"
+echo Mal%blank%ware found, PowerShell is not working properly.
+echo:
+set fixes=%fixes% %mas%remove_mal%w%ware
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%remove_mal%w%ware"
+goto dk_done
+)
+
+REM check antivirus and other errors
+
+echo PowerShell is not working properly. Aborting...
+
+if /i "!tstresult2!"=="FullLanguage" (
+echo:
+echo Your antivirus software might be blocking the script, or PowerShell on your system might be corrupted.
+cmd /c "%psc% ""$av = Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct; $n = @(); foreach ($i in $av) { $n += $i.displayName }; if ($n) { Write-Host ('Installed Antivirus - ' + ($n -join ', '))}"""
+)
+
+echo:
+set fixes=%fixes% %mas%troubleshoot
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
 goto dk_done
 )
 
@@ -211,33 +261,33 @@ set terminal=
 
 ::  Check if script is running in Terminal app
 
-set r1=$TB = [AppDomain]::CurrentDomain.DefineDynamicAssembly(4, 1).DefineDynamicModule(2, $False).DefineType(0);
-set r2=%r1% [void]$TB.DefinePInvokeMethod('GetConsoleWindow', 'kernel32.dll', 22, 1, [IntPtr], @(), 1, 3).SetImplementationFlags(128);
-set r3=%r2% [void]$TB.DefinePInvokeMethod('SendMessageW', 'user32.dll', 22, 1, [IntPtr], @([IntPtr], [UInt32], [IntPtr], [IntPtr]), 1, 3).SetImplementationFlags(128);
-set d1=%r3% $hIcon = $TB.CreateType(); $hWnd = $hIcon::GetConsoleWindow();
-set d2=%d1% echo $($hIcon::SendMessageW($hWnd, 127, 0, 0) -ne [IntPtr]::Zero);
-
 if defined terminal (
-%psc% "%d2%" %nul2% | find /i "True" %nul1% && set terminal=
+set lines=0
+for /f "skip=2 tokens=2 delims=: " %%A in ('mode con') do if "!lines!"=="0" set lines=%%A
+if !lines! GEQ 100 set terminal=
 )
 
 if %_unattended%==1 goto :skipQE
 for %%# in (%_args%) do (if /i "%%#"=="-qedit" goto :skipQE)
 
+::  Relaunch to disable QuickEdit in the current session and use conhost.exe instead of the Terminal app
+::  This code disables QuickEdit for the current cmd.exe session without making permanent registry changes
+::  It is included because clicking on the script window can pause execution, causing confusion that the script has stopped due to an error
+
+set resetQE=1
+reg query HKCU\Console /v QuickEdit %nul2% | find /i "0x0" %nul1% && set resetQE=0
+reg add HKCU\Console /v QuickEdit /t REG_DWORD /d 0 /f %nul1%
+
 if defined terminal (
-set "launchcmd=start conhost.exe %psc%"
-) else (
-set "launchcmd=%psc%"
+start conhost.exe "!_batf!" %_args% -qedit
+start reg add HKCU\Console /v QuickEdit /t REG_DWORD /d %resetQE% /f %nul1%
+exit /b
+) else if %resetQE% EQU 1 (
+start cmd.exe /c ""!_batf!" %_args% -qedit"
+start reg add HKCU\Console /v QuickEdit /t REG_DWORD /d %resetQE% /f %nul1%
+exit /b
 )
 
-::  Disable QuickEdit in current session
-
-set "d1=$t=[AppDomain]::CurrentDomain.DefineDynamicAssembly(4, 1).DefineDynamicModule(2, $False).DefineType(0);"
-set "d2=$t.DefinePInvokeMethod('GetStdHandle', 'kernel32.dll', 22, 1, [IntPtr], @([Int32]), 1, 3).SetImplementationFlags(128);"
-set "d3=$t.DefinePInvokeMethod('SetConsoleMode', 'kernel32.dll', 22, 1, [Boolean], @([IntPtr], [Int32]), 1, 3).SetImplementationFlags(128);"
-set "d4=$k=$t.CreateType(); $b=$k::SetConsoleMode($k::GetStdHandle(-10), 0x0080);"
-
-%launchcmd% "%d1% %d2% %d3% %d4% & cmd.exe '/c' '!_PSarg! -qedit'" && (exit /b) || (set terminal=1)
 :skipQE
 
 ::========================================================================================================================================
@@ -246,9 +296,19 @@ set "d4=$k=$t.CreateType(); $b=$k::SetConsoleMode($k::GetStdHandle(-10), 0x0080)
 
 set -=
 set old=
+set pingp=
+set upver=%masver:.=%
 
-for /f "delims=[] tokens=2" %%# in ('ping -4 -n 1 updatecheck.mass%-%grave.dev') do (
-if not "%%#"=="" (echo "%%#" | find "127.69" %nul1% && (echo "%%#" | find "127.69.%masver%" %nul1% || set old=1))
+for %%A in (
+activ%-%ated.win
+mass%-%grave.dev
+) do if not defined pingp (
+for /f "delims=[] tokens=2" %%B in ('ping -n 1 %%A') do (
+if not "%%B"=="" (set old=1& set pingp=1)
+for /f "delims=[] tokens=2" %%C in ('ping -n 1 updatecheck%upver%.%%A') do (
+if not "%%C"=="" set old=
+)
+)
 )
 
 if defined old (
@@ -264,7 +324,7 @@ echo:
 call :dk_color %_Green% "Choose a menu option using your keyboard [1,0] :"
 choice /C:10 /N
 if !errorlevel!==2 rem
-if !errorlevel!==1 (start ht%-%tps://github.com/mass%-%gravel/Microsoft-Acti%-%vation-Scripts & start %mas% & exit /b)
+if !errorlevel!==1 (start %selfgit% & start %github% & start %mas% & exit /b)
 )
 )
 
@@ -304,8 +364,11 @@ if not exist %SysPath%\%%# (
 %eline%
 echo [%SysPath%\%%#] file is missing, aborting...
 echo:
+call :dk_color %Blue% "Go back to Main Menu, select Troubleshoot and run DISM Restore and SFC Scan options."
+call :dk_color %Blue% "After that, restart system and try activation again."
+echo:
 set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
 goto dk_done
 )
 )
@@ -330,15 +393,14 @@ if defined UBR (set "fullbuild=%%G.!UBR!") else (set "fullbuild=%%G.%%H")
 
 ::========================================================================================================================================
 
-::  Check Activation ID
+::  Check Activation IDs
 
-call :dk_actid 55c92734-d682-4d71-983e-d6ec3f16059f
-if not defined apps (
+call :dk_actids 55c92734-d682-4d71-983e-d6ec3f16059f
+if not defined allapps (
 %eline%
-echo Either key is not insalled or script failed to get installed key's activation ID. Aborting...
+echo Failed to find activation IDs. Aborting...
 echo:
-set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color %Blue% "To fix this issue, activate Windows from the main menu."
 goto dk_done
 )
 
@@ -346,30 +408,28 @@ goto dk_done
 
 ::  Check Windows Edition and branch
 
-set osedition=0
-set dismedition=
+set osedition=
 set dismnotworking=
+
+for /f "tokens=3 delims=: " %%a in ('DISM /English /Online /Get-CurrentEdition %nul6% ^| find /i "Current Edition :"') do set "osedition=%%a"
+if not defined osedition set dismnotworking=1
 
 if %_wmic% EQU 1 set "chkedi=for /f "tokens=2 delims==" %%a in ('"wmic path %spp% where (ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND LicenseDependsOn is NULL AND PartialProductKey IS NOT NULL) get LicenseFamily /VALUE" %nul6%')"
 if %_wmic% EQU 0 set "chkedi=for /f "tokens=2 delims==" %%a in ('%psc% "(([WMISEARCHER]'SELECT LicenseFamily FROM %spp% WHERE ApplicationID=''55c92734-d682-4d71-983e-d6ec3f16059f'' AND LicenseDependsOn is NULL AND PartialProductKey IS NOT NULL').Get()).LicenseFamily ^| %% {echo ('LicenseFamily='+$_)}" %nul6%')"
-%chkedi% do if not errorlevel 1 (call set "osedition=%%a")
+if not defined osedition %chkedi% do if not errorlevel 1 (call set "osedition=%%a")
 
-if %osedition%==0 (
+if not defined osedition (
 %eline%
 echo Failed to detect OS edition, aborting...
 echo:
-set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color %Blue% "To fix this issue, activate Windows from the main menu."
 goto dk_done
 )
 
 for /f "skip=2 tokens=3" %%a in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v EditionID %nul6%') do set "regedition=%%a"
 if /i not "%osedition%"=="%regedition%" (
-set "showeditionerror=call :dk_color %_Yellow% "Mismatch found [WMI-%osedition%] [Reg-%regedition%].""
+set "showeditionerror=call :dk_color %_Yellow% "[%osedition%] [Reg-%regedition%].""
 )
-
-for /f "tokens=3 delims=: " %%a in ('DISM /English /Online /Get-CurrentEdition %nul6% ^| find /i "Current Edition :"') do set "dismedition=%%a"
-if not defined dismedition set dismnotworking=1
 
 set branch=
 for /f "skip=2 tokens=2*" %%a in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v BuildBranch %nul6%') do set "branch=%%b"
@@ -388,7 +448,7 @@ if %winbuild% GEQ 10240 for /f "tokens=4" %%a in ('dism /online /english /Get-Ta
 if %winbuild% LSS 10240 for /f "tokens=4" %%a in ('%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':cbsxml\:.*';& ([ScriptBlock]::Create($f[1])) -GetTargetEditions;" ^| findstr /i /c:"Target Edition : "') do (if defined _ptarget (set "_ptarget= !_ptarget! %%a ") else (set "_ptarget= %%a "))
 
 if %winbuild% GEQ 10240 if not exist "%SystemRoot%\Servicing\Packages\Microsoft-Windows-Server*Edition~*.mum" (
-call :ced_edilist
+if %winbuild% GEQ 17063 call :ced_edilist
 if /i "%osedition:~0,4%"=="Core" set _pro=Professional
 if /i "%osedition%"=="CoreN" set _pro=ProfessionalN
 set "_dtarget= %_dtarget% !_wtarget! !_pro! "
@@ -501,7 +561,7 @@ set _dismapi=0
 
 ::  Check if DISM API or slmgr.vbs is required for edition upgrade
 
-if not exist "%SysPath%\spp\tokens\skus\%targetedition%\" (
+if not exist "%SysPath%\spp\tokens\skus\%targetedition%\%targetedition%*.xrm-ms" (
 echo %_wtarget% | find /i " %targetedition% " || (
 set _dismapi=1
 )
@@ -524,7 +584,7 @@ echo [%targetedition% ^| %winbuild%]
 echo Failed to get product key from pkeyhelper.dll.
 echo:
 set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
 goto dk_done
 )
 
@@ -579,7 +639,7 @@ call :dk_color %Gray% "Reboot is required to fully change the edition."
 call :dk_color %Red% "[Unsuccessful] [Error Code: !keyerror!]"
 echo:
 set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
 )
 )
 
@@ -605,7 +665,7 @@ goto dk_done
 cls
 if not defined terminal (
 mode con cols=105 lines=32
-%psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=31;$B.Height=200;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}"
+%psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=31;$B.Height=200;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}" %nul%
 )
 
 call :ced_rebootflag
@@ -642,7 +702,7 @@ goto dk_done
 cls
 if not defined terminal (
 mode con cols=105 lines=32
-%psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=31;$B.Height=200;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}"
+%psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=31;$B.Height=200;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}" %nul%
 )
 
 set key=
@@ -660,7 +720,7 @@ echo [%targetedition% ^| %winbuild%]
 echo Failed to get product key from pkeyhelper.dll.
 echo:
 set fixes=%fixes% %mas%troubleshoot
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%troubleshoot"
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%troubleshoot"
 goto dk_done
 )
 
@@ -736,14 +796,14 @@ echo:
 call :dk_color %Blue% "In case there are errors, you should restart the system before trying again."
 echo:
 set fixes=%fixes% %mas%change_edition_issues
-call :dk_color2 %Blue% "Help - " %_Yellow% " %mas%change_edition_issues"
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%change_edition_issues"
 exit /b
 
 :compresslog
 
 ::  https://stackoverflow.com/a/46268232
 
-set "ddf="%SystemRoot%\Temp\ddf""
+set "ddf="%SystemRoot%\Temp\%Random%%Random%%Random%%Random%""
 %nul% del /q /f %ddf%
 echo/.New Cabinet>%ddf%
 echo/.set Cabinet=ON>>%ddf%
@@ -775,13 +835,21 @@ exit /b
 
 :dk_setvar
 
-set psc=powershell.exe
+set ps=%SysPath%\WindowsPowerShell\v1.0\powershell.exe
+set psc=%ps% -nop -c
 set winbuild=1
 for /f "tokens=6 delims=[]. " %%G in ('ver') do set winbuild=%%G
+
+set _slexe=sppsvc.exe& set _slser=sppsvc
+if %winbuild% LEQ 6300 (set _slexe=SLsvc.exe& set _slser=SLsvc)
+if %winbuild% LSS 7600 if exist "%SysPath%\SLsvc.exe" (set _slexe=SLsvc.exe& set _slser=SLsvc)
+if %_slexe%==SLsvc.exe set _vis=1
 
 set _NCS=1
 if %winbuild% LSS 10586 set _NCS=0
 if %winbuild% GEQ 10586 reg query "HKCU\Console" /v ForceV2 %nul2% | find /i "0x0" %nul1% && (set _NCS=0)
+
+echo "%PROCESSOR_ARCHITECTURE% %PROCESSOR_ARCHITEW6432%" | find /i "ARM64" %nul1% && (if %winbuild% LSS 21277 set ps32onArm=1)
 
 if %_NCS% EQU 1 (
 for /F %%a in ('echo prompt $E ^| cmd') do set "esc=%%a"
@@ -789,6 +857,7 @@ set     "Red="41;97m""
 set    "Gray="100;97m""
 set   "Green="42;97m""
 set    "Blue="44;97m""
+set   "White="107;91m""
 set    "_Red="40;91m""
 set  "_White="40;37m""
 set  "_Green="40;92m""
@@ -798,6 +867,7 @@ set     "Red="Red" "white""
 set    "Gray="Darkgray" "white""
 set   "Green="DarkGreen" "white""
 set    "Blue="Blue" "white""
+set   "White="White" "Red""
 set    "_Red="Black" "Red""
 set  "_White="Black" "Gray""
 set  "_Green="Black" "Green""
@@ -825,14 +895,14 @@ if %_wmic% EQU 1 wmic path %sps% where __CLASS='%sps%' call RefreshLicenseStatus
 if %_wmic% EQU 0 %psc% "$null=(([WMICLASS]'%sps%').GetInstances()).RefreshLicenseStatus()" %nul%
 exit /b
 
-::  Get installed products Activation IDs
+::  Get all products Activation IDs
 
-:dk_actid
+:dk_actids
 
-set apps=
-if %_wmic% EQU 1 set "chkapp=for /f "tokens=2 delims==" %%a in ('"wmic path %spp% where (ApplicationID='%1' and PartialProductKey is not null) get ID /VALUE" %nul6%')"
-if %_wmic% EQU 0 set "chkapp=for /f "tokens=2 delims==" %%a in ('%psc% "(([WMISEARCHER]'SELECT ID FROM %spp% WHERE ApplicationID=''%1'' AND PartialProductKey IS NOT NULL').Get()).ID ^| %% {echo ('ID='+$_)}" %nul6%')"
-%chkapp% do (if defined apps (call set "apps=!apps! %%a") else (call set "apps=%%a"))
+set allapps=
+if %_wmic% EQU 1 set "chkapp=for /f "tokens=2 delims==" %%a in ('"wmic path %spp% where (ApplicationID='%1') get ID /VALUE" %nul6%')"
+if %_wmic% EQU 0 set "chkapp=for /f "tokens=2 delims==" %%a in ('%psc% "(([WMISEARCHER]'SELECT ID FROM %spp% WHERE ApplicationID=''%1''').Get()).ID ^| %% {echo ('ID='+$_)}" %nul6%')"
+%chkapp% do (if defined allapps (call set "allapps=!allapps! %%a") else (call set "allapps=%%a"))
 exit /b
 
 ::  Get Edition list
@@ -848,6 +918,7 @@ exit /b
 
 :dk_ckeckwmic
 
+if %winbuild% LSS 9200 (set _wmic=1&exit /b)
 set _wmic=0
 for %%# in (wmic.exe) do @if not "%%~$PATH:#"=="" (
 cmd /c "wmic path Win32_ComputerSystem get CreationClassName /value" %nul2% | find /i "computersystem" %nul1% && set _wmic=1
@@ -858,16 +929,16 @@ exit /b
 
 :dk_sppissue
 
-sc start sppsvc %nul%
+sc start %_slser% %nul%
 set spperror=%errorlevel%
 
 if %spperror% NEQ 1056 if %spperror% NEQ 0 (
 %eline%
-echo sc start sppsvc [Error Code: %spperror%]
+echo sc start %_slser% [Error Code: %spperror%]
 )
 
 echo:
-%psc% "$job = Start-Job { (Get-WmiObject -Query 'SELECT * FROM %sps%').Version }; if (-not (Wait-Job $job -Timeout 20)) {write-host 'sppsvc is not working correctly. Help - %mas%troubleshoot'}"
+%psc% "$job = Start-Job { (Get-WmiObject -Query 'SELECT * FROM %sps%').Version }; if (-not (Wait-Job $job -Timeout 30)) {write-host '%_slser% is not working correctly. Check this webpage for help - %mas%troubleshoot'}"
 exit /b
 
 ::  Common lines used in PowerShell reflection code
@@ -965,8 +1036,10 @@ exit /b
 
 if %_NCS% EQU 1 (
 echo %esc%[%~1%~2%esc%[0m
-) else (
+) else if exist %ps% (
 %psc% write-host -back '%1' -fore '%2' '%3'
+) else if not exist %ps% (
+echo %~3
 )
 exit /b
 
@@ -974,8 +1047,10 @@ exit /b
 
 if %_NCS% EQU 1 (
 echo %esc%[%~1%~2%esc%[%~3%~4%esc%[0m
-) else (
+) else if exist %ps% (
 %psc% write-host -back '%1' -fore '%2' '%3' -NoNewline; write-host -back '%4' -fore '%5' '%6'
+) else if not exist %ps% (
+echo %~3 %~6
 )
 exit /b
 
@@ -987,9 +1062,11 @@ echo:
 if %_unattended%==1 timeout /t 2 & exit /b
 
 if defined fixes (
-call :dk_color2 %Blue% "Press [1] to Open Troubleshoot Page " %Gray% " Press [0] to Ignore"
+call :dk_color %White% "Follow ALL the ABOVE blue lines.   "
+call :dk_color2 %Blue% "Press [1] to Open Support Webpage " %Gray% " Press [0] to Ignore"
 choice /C:10 /N
-if !errorlevel!==1 (for %%# in (%fixes%) do (start %%#))
+if !errorlevel!==2 exit /b
+if !errorlevel!==1 (start %selfgit% & start %github% & for %%# in (%fixes%) do (start %%#))
 )
 
 if defined terminal (
@@ -1267,11 +1344,15 @@ if (!$Dism::_DismSetEdition($Session, "$TargetEdition", "$Key", 0, 0, 0)) {
 ::  Separator  = _
 
 ::  For Windows 10/11 editions, HWID key is listed where ever possible, in Server versions, KMS key is listed where ever possible.
-::  Only RS3 and older version Generic keys are stored here, later ones are extracted from the pkeyhelper.dll itself
+::  For Windows, generic keys are mentioned till 22000 and for Server, generic keys are mentioned till 17763, later ones are extracted from the pkeyhelper.dll
 
 :changeeditiondata
 
+if exist "%SystemRoot%\Servicing\Packages\Microsoft-Windows-Server*Edition~*.mum" (
 if %winbuild% GTR 17763 exit /b
+) else (
+if %winbuild% GEQ 22000 exit /b
+)
 if exist "%SystemRoot%\Servicing\Packages\Microsoft-Windows-Server*CorEdition~*.mum" (set Cor=Cor) else (set Cor=)
 
 set h=
@@ -1289,8 +1370,12 @@ YTMG3-N6DKC-DKB77-7M9GH-8HV%h%X7______Retail_Core
 XKCNC-J26Q9-KFHD2-FKTHY-KD7%h%2Y__OEM:NONSLP_PPIPro
 YNMGQ-8RYV3-4PGQ3-C8XTP-7CF%h%BY______Retail_Education
 84NGF-MHBT6-FXBX8-QWJK7-DRR%h%8H______Retail_EducationN
+KCNVH-YKWX8-GJJB9-H9FDT-6F7%h%W2__Volume:MAK_EnterpriseS_VB
+43TBQ-NH92J-XKTM7-KT3KK-P39%h%PB__OEM:NONSLP_EnterpriseS_RS5
 NK96Y-D9CD8-W44CQ-R8YTK-DYJ%h%WX__OEM:NONSLP_EnterpriseS_RS1
 FWN7H-PF93Q-4GGP8-M8RF3-MDW%h%WW__OEM:NONSLP_EnterpriseS_TH
+RQFNW-9TPM3-JQ73T-QV4VQ-DV9%h%PT__Volume:MAK_EnterpriseSN_VB
+M33WV-NHY3C-R7FPM-BQGPT-239%h%PG__Volume:MAK_EnterpriseSN_RS5
 2DBW3-N2PJG-MVHW3-G7TDK-9HK%h%R4__Volume:MAK_EnterpriseSN_RS1
 NTX6B-BRYC2-K6786-F6MVQ-M7V%h%2X__Volume:MAK_EnterpriseSN_TH
 G3KNM-CHG6T-R36X3-9QDG6-8M8%h%K9______Retail_ProfessionalSingleLanguage
@@ -1302,6 +1387,10 @@ GJTYN-HDMQY-FRR76-HVGC7-QPF%h%8P______Retail_ProfessionalEducationN
 C4NTJ-CX6Q2-VXDMR-XVKGM-F9D%h%JC__Volume:MAK_EnterpriseG
 46PN6-R9BK9-CVHKB-HWQ9V-MBJ%h%Y8__Volume:MAK_EnterpriseGN
 NJCF7-PW8QT-3324D-688JX-2YV%h%66______Retail_ServerRdsh
+XQQYW-NFFMW-XJPBH-K8732-CKF%h%FD______OEM:DM_IoTEnterprise
+QPM6N-7J2WJ-P88HH-P3YRH-YY7%h%4H__OEM:NONSLP_IoTEnterpriseS
+K9VKN-3BGWV-Y624W-MCRMQ-BHD%h%CD______Retail_CloudEditionN
+KY7PN-VR6RX-83W6Y-6DDYQ-T6R%h%4W______Retail_CloudEdition
 V3WVW-N2PV2-CGWC3-34QGF-VMJ%h%2C______Retail_Cloud
 NH9J3-68WK7-6FB93-4K3DF-DJ4%h%F6______Retail_CloudN
 2HN6V-HGTM8-6C97C-RK67V-JQP%h%FD______Retail_CloudE
