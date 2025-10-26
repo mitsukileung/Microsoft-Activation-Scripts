@@ -1,11 +1,11 @@
-@set masver=3.4
+@set masver=3.7
 @echo off
 
 
 
 ::============================================================================
 ::
-::   Homepage: mass grave[.]dev
+::   Homepage: mass()grave(dot)dev
 ::      Email: mas.help@outlook.com
 ::
 ::============================================================================
@@ -37,6 +37,7 @@ set "_cmdf=%~f0"
 for %%# in (%*) do (
 if /i "%%#"=="re1" set re1=1
 if /i "%%#"=="re2" set re2=1
+if /i "%%#"=="-qedit" (set re1=1&set re2=1)
 )
 
 :: Re-launch the script with x64 process if it was initiated by x86 process on x64 bit Windows
@@ -135,6 +136,16 @@ call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%trouble
 goto dk_done
 )
 
+if exist "%Systemdrive%\Users\WDAGUtilityAccount" (
+sc query gcs | find /i "RUNNING" %nul% && (
+%eline%
+echo Windows Sandbox detected.
+echo The script cannot run due to missing licensing components. Aborting...
+echo:
+goto dk_done
+)
+)
+
 if %winbuild% LSS 6001 (
 %nceline%
 echo Unsupported OS version detected [%winbuild%].
@@ -207,7 +218,7 @@ goto dk_done
 
 ::pstst $ExecutionContext.SessionState.LanguageMode :pstst
 
-for /f "delims=" %%a in ('%psc% "if ($PSVersionTable.PSEdition -ne 'Core') {$f=[io.file]::ReadAllText('!_batp!') -split ':pstst';iex ($f[1])}" %nul6%') do (set tstresult=%%a)
+for /f "delims=" %%a in ('%psc% "if ($PSVersionTable.PSEdition -ne 'Core') {$f=[System.IO.File]::ReadAllText('!_batp!') -split ':pstst';. ([scriptblock]::Create($f[1]))}" %nul6%') do (set tstresult=%%a)
 
 if /i not "%tstresult%"=="FullLanguage" (
 %eline%
@@ -231,6 +242,9 @@ REM check Powershell core version
 
 cmd /c "%psc% "$PSVersionTable.PSEdition"" | find /i "Core" %nul1% && (
 echo Windows Powershell is needed for MAS but it seems to be replaced with Powershell core. Aborting...
+echo:
+set fixes=%fixes% %mas%in-place_repair_upgrade
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%in-place_repair_upgrade"
 goto dk_done
 )
 
@@ -245,13 +259,30 @@ call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%remove_
 goto dk_done
 )
 
+REM check if .NET is working properly
+
+if /i "!tstresult2!"=="FullLanguage" (
+cmd /c "%psc% ""try {[System.AppDomain]::CurrentDomain.GetAssemblies(); [System.Math]::Sqrt(144)} catch {Exit 3}""" %nul%
+if !errorlevel!==3 (
+echo Windows Powershell failed to load .NET command. Aborting...
+echo:
+set fixes=%fixes% %mas%in-place_repair_upgrade
+call :dk_color2 %Blue% "Check this webpage for help - " %_Yellow% " %mas%in-place_repair_upgrade"
+goto dk_done
+)
+)
+
 REM check antivirus and other errors
 
 echo PowerShell is not working properly. Aborting...
 
 if /i "!tstresult2!"=="FullLanguage" (
 echo:
-echo Your antivirus software might be blocking the script, or PowerShell on your system might be corrupted.
+echo Your antivirus software might be blocking the script.
+echo:
+sc query sense | find /i "RUNNING" %nul% && (
+echo Installed Antivirus - Microsoft Defender for Endpoint
+)
 cmd /c "%psc% ""$av = Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct; $n = @(); foreach ($i in $av) { $n += $i.displayName }; if ($n) { Write-Host ('Installed Antivirus - ' + ($n -join ', '))}"""
 )
 
@@ -275,7 +306,9 @@ set terminal=
 
 if defined terminal (
 set lines=0
-for /f "skip=2 tokens=2 delims=: " %%A in ('mode con') do if "!lines!"=="0" set lines=%%A
+for /f "skip=3 tokens=* delims=" %%A in ('mode con') do if "!lines!"=="0" (
+for %%B in (%%A) do set lines=%%B
+)
 if !lines! GEQ 100 set terminal=
 )
 
@@ -691,6 +724,25 @@ echo:
 call :dk_color %Blue% "Rebuilding SPP licensing tokens..."
 echo:
 
+echo Clearing KMS Cache...
+echo:
+call :_taskclear-cache
+
+%nul% reg query "HKLM\%SPPk%\%_wApp%" && (
+echo Removing KMS38 protection...
+%psc% "$f=[System.IO.File]::ReadAllText('!_batp!') -split ':regdel\:.*';. ([scriptblock]::Create($f[1]))"
+%nul% reg delete "HKLM\%SPPk%\%_wApp%" /f
+%nul% reg query "HKLM\%SPPk%\%_wApp%" && (
+call :dk_color %Red% "Failed to remove KMS38 protection."
+) || (
+echo Successfully removed KMS38 protection.
+echo Successfully cleared KMS Cache.
+)
+) || (
+echo Successfully cleared KMS Cache.
+)
+echo:
+
 call :scandat check
 
 if not defined token (
@@ -716,7 +768,7 @@ echo Checking SPP permission related issues...
 call :checkperms
 if defined permerror (
 call :dk_color %Red% "[!permerror!]"
-%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':fixsppperms\:.*';iex ($f[1])" %nul%
+%psc% "$f=[System.IO.File]::ReadAllText('!_batp!') -split ':fixsppperms\:.*';. ([scriptblock]::Create($f[1]))" %nul%
 call :checkperms
 if defined permerror (
 call :dk_color %Red% "[!permerror!] [Failed To Fix]"
@@ -786,8 +838,8 @@ if defined _vis (
 
 echo:
 echo Reinstalling system licenses...
-%psc% "$sls = Get-WmiObject SoftwareLicensingService; $f=[io.file]::ReadAllText('!_batp!') -split ':xrm\:.*';iex ($f[1]); ReinstallLicenses" %nul%
-if %errorlevel% NEQ 0 %psc% "$sls = Get-WmiObject SoftwareLicensingService; $f=[io.file]::ReadAllText('!_batp!') -split ':xrm\:.*';iex ($f[1]); ReinstallLicenses" %nul%
+%psc% "$sls = Get-WmiObject SoftwareLicensingService; $f=[System.IO.File]::ReadAllText('!_batp!') -split ':xrm\:.*';. ([scriptblock]::Create($f[1])); ReinstallLicenses" %nul%
+if %errorlevel% NEQ 0 %psc% "$sls = Get-WmiObject SoftwareLicensingService; $f=[System.IO.File]::ReadAllText('!_batp!') -split ':xrm\:.*';. ([scriptblock]::Create($f[1])); ReinstallLicenses" %nul%
 if %errorlevel% EQU 0 (
 echo [Successful]
 ) else (
@@ -1254,6 +1306,59 @@ exit /b
 
 ::========================================================================================================================================
 
+::  Clean existing K-M-S cache from the registry
+
+:_taskclear-cache
+
+set w=
+for %%# in (SppE%w%xtComObj.exe sppsvc.exe SLsvc.exe) do (
+reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Ima%w%ge File Execu%w%tion Options\%%#" /f %nul%
+)
+
+set "OPPk=SOFTWARE\Microsoft\OfficeSoftwareProtectionPlatform"
+
+if %winbuild% LSS 7600 (
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SL" %nul% && (
+set "SPPk=SOFTWARE\Microsoft\Windows NT\CurrentVersion\SL"
+)
+)
+if not defined SPPk (
+set "SPPk=SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform"
+)
+
+set "slp=SoftwareLicensingProduct"
+set "ospp=OfficeSoftwareProtectionProduct"
+
+set "_wApp=55c92734-d682-4d71-983e-d6ec3f16059f"
+set "_oApp=0ff1ce15-a989-479d-af46-f275c6370663"
+set "_oA14=59a52881-a989-479d-af46-f275c6370663"
+
+%nul% reg delete "HKLM\%SPPk%" /f /v KeyManagementServiceName
+%nul% reg delete "HKLM\%SPPk%" /f /v KeyManagementServiceName /reg:32
+%nul% reg delete "HKLM\%SPPk%" /f /v KeyManagementServicePort
+%nul% reg delete "HKLM\%SPPk%" /f /v KeyManagementServicePort /reg:32
+%nul% reg delete "HKLM\%SPPk%" /f /v DisableDnsPublishing
+%nul% reg delete "HKLM\%SPPk%" /f /v DisableKeyManagementServiceHostCaching
+%nul% reg delete "HKLM\%SPPk%\%_wApp%" /f
+if %winbuild% GEQ 9200 (
+%nul% reg delete "HKLM\%SPPk%\%_oApp%" /f
+%nul% reg delete "HKLM\%SPPk%\%_oApp%" /f /reg:32
+)
+if %winbuild% GEQ 9600 (
+%nul% reg delete "HKU\S-1-5-20\%SPPk%\%_wApp%" /f
+%nul% reg delete "HKU\S-1-5-20\%SPPk%\%_oApp%" /f
+)
+%nul% reg delete "HKLM\%OPPk%" /f /v KeyManagementServiceName
+%nul% reg delete "HKLM\%OPPk%" /f /v KeyManagementServicePort
+%nul% reg delete "HKLM\%OPPk%" /f /v DisableDnsPublishing
+%nul% reg delete "HKLM\%OPPk%" /f /v DisableKeyManagementServiceHostCaching
+%nul% reg delete "HKLM\%OPPk%\%_oA14%" /f
+%nul% reg delete "HKLM\%OPPk%\%_oApp%" /f
+
+exit /b
+
+::========================================================================================================================================
+
 ::  Fix SPP related registry and folder permissions
 
 :fixsppperms:
@@ -1433,7 +1538,7 @@ exit /b
 
 :regownstart
 
-%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':regown\:.*';iex ($f[1]);"
+%psc% "$f=[System.IO.File]::ReadAllText('!_batp!') -split ':regown\:.*';. ([scriptblock]::Create($f[1]));"
 exit /b
 
 ::  Below code takes ownership of a volatile registry key and deletes it
@@ -1462,6 +1567,36 @@ $rule = New-Object System.Security.AccessControl.RegistryAccessRule($Admin,"Full
 $acl.SetAccessRule($rule)
 $key.SetAccessControl($acl)
 :regown:
+
+::========================================================================================================================================
+
+::  This code runs to undo below registry key KMS38 protection
+::  HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform\55c92734-d682-4d71-983e-d6ec3f16059f
+
+::  This option is not used in KMS38 anymore, it's here only to remove previous versions protection.
+
+:regdel:
+param (
+    [switch]$protect
+)
+
+$SID = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+$Admin = ($SID.Translate([System.Security.Principal.NTAccount])).Value
+
+if($protect) {
+$ruleArgs = @("$Admin", "Delete, SetValue", "ContainerInherit", "None", "Deny")
+} else {
+$ruleArgs = @("$Admin", "FullControl", "Allow")
+}
+
+$path = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform\55c92734-d682-4d71-983e-d6ec3f16059f'
+$key = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Registry64').OpenSubKey($path, 'ReadWriteSubTree', 'ChangePermissions')
+$acl = $key.GetAccessControl()
+
+$rule = [System.Security.AccessControl.RegistryAccessRule]::new.Invoke($ruleArgs)
+$acl.ResetAccessRule($rule)
+$key.SetAccessControl($acl)
+:regdel:
 
 ::========================================================================================================================================
 
@@ -1521,7 +1656,7 @@ exit /b
 set ps=%SysPath%\WindowsPowerShell\v1.0\powershell.exe
 set psc=%ps% -nop -c
 set winbuild=1
-for /f "tokens=6 delims=[]. " %%G in ('ver') do set winbuild=%%G
+for /f "tokens=2 delims=[]" %%G in ('ver') do for /f "tokens=2,3,4 delims=. " %%H in ("%%~G") do set "winbuild=%%J"
 
 set _slexe=sppsvc.exe& set _slser=sppsvc
 if %winbuild% LEQ 6300 (set _slexe=SLsvc.exe& set _slser=SLsvc)
